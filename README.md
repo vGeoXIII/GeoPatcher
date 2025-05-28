@@ -4,7 +4,7 @@ GitHub: https://github.com/vGeoXIII/GeoPatcher
 Project for streamlining the translation process of editing pc98 games.  
 Originally designed for editing "Variable Geo II: Bout of Cabalistic Goddess" by GIGA.
 
-![Example Translation](https://github.com/vGeoXIII/GeoPatcher/blob/images/yuka_prefight.BMP)
+![Example Translation](https://github.com/vGeoXIII/GeoPatcher/blob/main/images/yuka_prefight.BMP)
 
 ## GeoPatcher.py
 Tool for extracting, editing, and patching text data from VGII. Run in shell/cli with:  
@@ -16,7 +16,7 @@ Commands:
 - `-d target_file <translation_file>` : Generates translation_file with offsets and strings found in target_file.
    - translation_file is read per line as offset (in hex), size, text; repeating until end of file.
    - Comment lines start with \#
-   - See example at [Translation File Example](https://github.com/vGeoXIII/GeoPatcher/blob/vg2.geolcl)
+   - See example at [Translation File Example](https://github.com/vGeoXIII/GeoPatcher/blob/main/vg2.geolcl)
 
 
 ## Resources
