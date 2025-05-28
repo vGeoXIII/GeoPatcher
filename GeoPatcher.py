@@ -6,7 +6,7 @@ import os
 # CONSTANTS
 # ==============================================================================
 
-VERSION = (0,0,1)
+VERSION = (0,1,0)
 
 SEARCH_EXT_EXCLUDE = ".bmp .png .zip .7z .rar".split()
 ENCODING_JP = 'shift_jis'
@@ -21,13 +21,19 @@ HELP_STR = "\n".join([
 "GeoPatcher.py v%s" % str(VERSION),
 "A tool for editing text data in \"Variable Geo II: Bout of Cabalistic Goddess\"",
 "GitHub: https://github.com/vGeoXIII/GeoPatcher",
-"",
+"!!!It is highly reccomended to back up your game files before using this program!!!",
+"--Debugging Commands---------------------------------",
 "-h \t\t\tDisplay help info",
 "-c <string>\t\tConverts and prints given string as byte data for patched game",
 "-cc <string>\t\tConverts and prints given string as halfwidth byte data for un-patched game",
-"-cb <string>\t\tPrints string as bytes",
+"-cb <string>\t\tPrints given string as bytes",
 "-s file_or_dir <str> <str> <...> \tScan and report instances of str(s) in file or directory.",
 "-sb file_or_dir <hex> <hex> <...> \tScan and report instances of hex in file or directory.",
+"-cmp bin1 bin2 <keybytes1> <keybytes2> \t\tPrints offsets of keybytes changes found in two binary files.",
+"\tCompares incremented values if no keys are given",
+"\tCompares any changes if first key are given",
+"\tCompares specific change from key1 to key2 if both keys are given",
+"--File Commands----------------------------------",
 "-r game_file <lcl_file>\tRead quoted text from game_file and generate lcl_file for text editing.",
 "\tUses Japanese quotes to locate text.",
 "\tSearches for Shift-JIS code patterns to locate text.",
@@ -37,6 +43,11 @@ HELP_STR = "\n".join([
 "-w game_file lcl_file \tWrite to game_file with text edits from lcl_file.",
 "\tText that exceeds original bytelength is truncated when writing to game_file",
 "-p vg2_hdi \t\tPatches VG2 hdi file to display halfwidth characters.",
+"-p_<cheat> vg2_hdi \tPatches VG2 hdi file with cheat from list:",
+"\t-p_p1zero \tStarts player 1 with 0 health",
+"\t-p_p2zero \tStarts player 2 with 0 health",
+"\t-p_thintext \tDisplays text at single pixel width",
+"Multiple File Commands can be used in one call (Ex: $ python GeoPatcher.py game.hdi -r -t -w -p )",
 ])
 
 LOCALTXT_HEADER = """
@@ -140,16 +151,23 @@ VGCHARMAP = {
 	"{": 0x9B,
 }
 
-
-
 # ======================================================================
 # FUNCTIONS
 # ======================================================================
-
-HexString = lambda value, digits=8: "".join(["0123456789ABCDEF"[(value >> (i*4)) & 0xF] for i in range(0, digits)])[::-1]
-HexRead = lambda hexstring: sum(["0123456789ABCDEF".index(c) * (1<<(i*4)) for i,c in enumerate(hexstring.replace("0x", "").upper()[::-1]) if c in "01234567890ABCDEFG"])
-
 JPBytes = lambda s: s.encode('shift_jis')
+
+HexString = lambda value, digits=8, space=False: "".join(["0123456789ABCDEF"[(value >> (i*4)) & 0xF] for i in range(0, digits)])[::-1]
+HexRead = lambda hexstring: sum(["0123456789ABCDEF".index(c) * (1<<(i*4)) for i,c in enumerate(hexstring.replace("0x", "").upper()[::-1]) if c in "01234567890ABCDEFG"])
+HexStringBytes = lambda hexstring: bytes([HexRead(text[i:i+2]) for text in [hexstring.replace("0x","").replace(" ", "")] for i in range(0, len(text), 2)]) if isinstance(hexstring, str) else hexstring
+
+# Returns string with translated text
+def TranslateJP(jptext):
+	translation = subprocess.check_output(["trans", "-b", "ja:", jptext]).decode('utf-8')
+	# Only use first line from cil
+	if "\n" in translation:
+		translation = translation.split("\n")[0]
+	translation = translation[:-1] # Get rid of newline at the end
+	return translation
 
 # Converts letters to their shift_jis counterparts 
 def JPLetters(text, linenum=0):
@@ -280,6 +298,80 @@ def ListNestedFiles(rootpath):
 	return outpaths
 
 # ......................................................................
+
+# Prints comparisons between two binary files
+def GeoPatcher_BinaryCmpPrint(fpath1, fpath2, hexbytes=None, newbytes=None):
+	if isinstance(hexbytes, str):
+		hexbytes = HexStringBytes(hexbytes)
+	if isinstance(newbytes, str):
+		newbytes = HexStringBytes(newbytes)
+	
+	# Open binary files
+	f = open(fpath1, "rb")
+	bin1 = bytes(f.read())
+	f.close()
+	
+	f = open(fpath2, "rb")
+	bin2 = bytes(f.read())
+	f.close()
+	n = min(len(bin1), len(bin2))
+	
+	print(fpath1)
+	print(fpath2)
+	
+	# Compare files
+	if hexbytes:
+		k = hexbytes
+		ksize = len(hexbytes)
+	
+	offset = 0
+	
+	# Compare increases by 1
+	if not newbytes and not hexbytes:
+		b1 = bin1
+		b2 = bin2
+		while offset < n-1:
+			# Test L v. R:
+			if b1[offset] == (b2[offset]-1):
+				# Print difference
+				print(
+					HexString(offset), 
+					"".join([HexString(x, 2) for x in b1[offset:offset+1]]), 
+					"".join([HexString(x, 2) for x in b2[offset:offset+1]]), 
+					)
+			offset += 1
+	# Compare any changes
+	elif not newbytes:
+		while offset < n-ksize:
+			# Test L v. R
+			for b1, b2 in ((bin1, bin2), (bin2, bin1)):
+				if b1[offset:offset+ksize] == k: # Match in 1
+					if b2[offset:offset+ksize] != k: # Different in 2
+						# Print difference
+						print(
+							HexString(offset), 
+							"".join([HexString(x, 2) for x in b1[offset:offset+ksize]]), 
+							"".join([HexString(x, 2) for x in b2[offset:offset+ksize]]), 
+						)
+			offset += 1
+
+	# Compare specific changes from old to new
+	else:
+		k2 = newbytes
+		while offset < n-ksize:
+			# Test L v. R
+			for b1, b2 in ((bin1, bin2), (bin2, bin1)):
+				if b1[offset:offset+ksize] == k: # Match in 1
+					if b2[offset:offset+ksize] == k2: # Second match in 2
+						# Print difference
+						print(
+							HexString(offset), 
+							"".join([HexString(x, 2) for x in b1[offset:offset+ksize]]), 
+							"".join([HexString(x, 2) for x in b2[offset:offset+ksize]]), 
+						)
+			offset += 1
+
+# Prints instances of strings in directory files or filepath
 def GeoPatcher_SearchKeys(dir_or_filepath, keys):
 	# Converts keys into list if not already
 	search_keys = keys
@@ -346,9 +438,10 @@ def GeoPatcher_SearchKeys(dir_or_filepath, keys):
 				print("   %s:\t"%k, ", ".join(["0x"+HexString(offset, 8) for offset in offsets]))
 	print("> Search Complete!")
 
-def GeoPatcher_SearchBytes(path, keys):
-	kbytes = bytes([HexRead(x) for x in keys.split()])
-	print(kbytes, kbytes[::-1])
+# Prints instances of byte sequences in directory files or filepath
+def GeoPatcher_SearchBytes(dir_or_filepath, keys):
+	kbytes = HexStringBytes(keys)
+	print(" ".join([HexString(x, 2) for x in kbytes]))
 	
 	exclude_ext = SEARCH_EXT_EXCLUDE[:]
 	
@@ -395,10 +488,12 @@ def GeoPatcher_SearchBytes(path, keys):
 		print("Files hit:", len(hitfiles))
 		hitfiles.sort(key=lambda hitkeyitem: -len(hitkeyitem[1]))
 	for fpath, k, linenum in hitfiles:
-		print(fpath, "\t{"+", ".join(["%s: %s" % (str(k), HexString(linenum))])+"}" )
+		print(fpath, "\t{"+", ".join(["%s: %s" % (" ".join([HexString(x,2) for x in kbytes]), "0x"+HexString(linenum))])+"}" )
 	print("> Search Complete!")
 
-# Parses binary file and outputs a text file for translation
+# ......................................................................
+
+# Parse binary file and output a text file for easy translation
 def GeoPatcher_GenerateLocalizerFile(srcpath, outpath="", deep_search=True):
 	if not outpath:
 		outpath = srcpath + ".geolcl"
@@ -539,8 +634,8 @@ def GeoPatcher_GenerateLocalizerFile(srcpath, outpath="", deep_search=True):
 							if size < 256:
 								textbytes = data[offset:i]
 								try:
-									text = textbytes.decode(ENCODING_JP).strip()
-									if not text:
+									text = textbytes.decode(ENCODING_JP)
+									if len(text) == 0:
 										textbytes = []
 								except:
 									pass
@@ -582,6 +677,7 @@ def GeoPatcher_GenerateLocalizerFile(srcpath, outpath="", deep_search=True):
 		print("> Localization file written to: \"%s\"" % outpath)
 
 # ......................................................................
+# Returns JP to EN translation map, while also creating and updating the cache file.
 def GeoPatcher_DictionaryFile(outpath, translation_map=None, keyorder=None):
 	if translation_map:
 		translation_map = {k: v for k,v in translation_map.items()}
@@ -605,11 +701,9 @@ def GeoPatcher_DictionaryFile(outpath, translation_map=None, keyorder=None):
 	mode = 0
 	block = []
 	for line in srclines:
-		line = line.rstrip()
+		line = line[:-1]
 		if not line or line[0] == "#":
 			if block and block[-1] != "":
-				if "# MTL" in line or "# Bytelength" in line:
-					continue
 				block.append(line)
 		elif mode == 0: # Original
 			original = line
@@ -623,9 +717,8 @@ def GeoPatcher_DictionaryFile(outpath, translation_map=None, keyorder=None):
 			# Write comments
 			if sum(["# Bytelength:" in x for x in block]) == 0:
 				block.insert(block.index(original)+1, "# Bytelength: %2d" % len(original.encode(ENCODING_JP)))
-			if 1:
-				if sum(["# MTL:" in x for x in block]) == 0:
-					block.append("# MTL: %s" % translation)
+			if sum(["# MTL:" in x for x in block]) == 0:
+				block.append("# MTL: %s" % translation)
 			
 			block.append(line)
 			
@@ -659,6 +752,7 @@ def GeoPatcher_DictionaryFile(outpath, translation_map=None, keyorder=None):
 	
 	return translation_map
 
+# Translate lines in lcl file using translate-shell and translation cache.
 def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 	if not outpath:
 		outpath = localizer_filepath
@@ -700,6 +794,7 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 	linehits = 0
 	queue_save = False
 	mode = 0
+	original = None
 	original_comment = False
 	print("> Translating lines. Saves will occur periodically. Feel free to cancel operation.")
 	for lineindex, srcline in enumerate(flines):
@@ -716,16 +811,15 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 				print("%3d%% (%4d/%4d Lines left)" % (progress_percent, linehits, totallinecount))
 			progress_percent += progress_step
 		
-		srcline = srcline.rstrip()
-		original = ""
+		srcline = srcline[:-1]	# Exclude newline char
 		
 		# Empty Line
-		if not srcline:
+		if len(srcline) == 0:
 			outlineblock.append(srcline)
 		# Comment line
 		elif srcline[0] == "#":
 			if "# Src: " in srcline:
-				original = srcline[len("# Src: "):].rstrip()
+				original = srcline[len("# Src: "):][:-1]
 				original_comment = True
 			outlineblock.append(srcline)
 		# Offset Line
@@ -736,31 +830,25 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 			mode = 1
 		# JP line
 		elif mode == 1:
-			if not original:
+			contains_jp = sum([ord(c) >= 255 for c in srcline]) >= len(srcline)//2
+			if not original and contains_jp:
 				original = srcline
-			contains_jp = sum([ord(c) >= 255 for c in original]) >= len(original)//2
-			hits += 1
 			
-			if contains_jp:
+			# Original Japanese line found in comment or current line
+			if original.strip():
 				# Check if original is already translated (prevents unnecessary calls to translator)
 				if original in translation_map.keys():
-					#print("Prefetching:", original)
 					translation = translation_map[original]
 				# Use cli translator program to translate string
-				elif contains_jp:
-					#print("Translating:", original)
-					size = len(original.encode(ENCODING_JP))
-					
-					translation = subprocess.check_output(["trans", "-b", "ja:", original]).decode('utf-8')
-					# Only use first line from cil
-					if "\n" in translation:
-						translation = translation.split("\n")[0]
-					translation = translation.rstrip() # Get rid of newline at the end
+				else:
+					# Call cli translator
+					translation = TranslateJP(original)
 					
 					# Add newline character from original
 					if "\\n" in original:
 						translation += "\\n"
 					# Cleanup
+					size = len(original.encode(ENCODING_JP))
 					translation = CleanDuplicateChars(translation, 4)
 					translationlen = len(translation)
 					if translationlen > 32 and translationlen > size*2:
@@ -768,17 +856,21 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 						print("  Original:   ", original)
 						print("  Translation:", translation)
 						translation = CleanDuplicateStrings(translation, 3, 10, 4)
-			
-			# Add to stringmap and output
-			translation_map[original] = translation
-			if not original_comment:
-				outlineblock.append("# Src: " + original)
-				outlineblock.append("# MTL: " + translation)
-			outlineblock.append(translation)
+					# Add new translation to translation map
+					translation_map[original] = translation
+				# Add lines to output
+				translation_order.append(original)
+				if not original_comment:
+					outlineblock.append("# Src: " + original)
+					outlineblock.append("# MTL: " + translation)
+				outlineblock.append(translation)
+			# No JP parsed. No change to line
+			else:
+				outlineblock.append(srcline)
 			
 			queue_save = True
 			mode = 0
-			original = ""
+			original = None
 			original_comment = False
 		# Data Line
 		else:
@@ -795,6 +887,8 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 	print("> Translation written to:", outpath)
 
 # ......................................................................
+
+# Writes lcl file translated lines to their original offsets for use with halfwidth patch.
 def GeoPatcher_ApplyLocalizerFile(localizer_filepath, target_filepath=""):
 	# Read localization file
 	f = open(localizer_filepath, "r", encoding='utf-8')
@@ -817,7 +911,7 @@ def GeoPatcher_ApplyLocalizerFile(localizer_filepath, target_filepath=""):
 	
 	mode = 0
 	for lineindex, line in enumerate(flines):
-		line = line.rstrip()
+		line = line[:-1]
 		if not line or line[0] == "#":
 			continue
 		# Offset line
@@ -860,17 +954,23 @@ def GeoPatcher_ApplyLocalizerFile(localizer_filepath, target_filepath=""):
 		print("> New text written to game: \"%s\"" % target_filepath)
 
 # ......................................................................
-def GeoPatcher_PatchVG2(filepath):
-	f = open(filepath, 'rb')
+
+# Write bytes to offset in byte array
+def GeoPatcher_PatchHDI(hdibytes, offset, codebytes):
+	n = len(codebytes)
+	for i,x in enumerate(codebytes):
+		if x >= 0:
+			hdibytes[offset+i] = x
+
+# Apply halfwidth patch to VG2 game file (.hdi)
+def GeoPatcher_PatchVG2(hdipath):
+	f = open(hdipath, 'rb')
 	data = bytearray(f.read())
 	f.close()
 	
 	def GeoPatch(data, offsets, code):
-		n = len(code)
 		for offset in offsets:
-			for i,x in enumerate(code):
-				if x > 0:
-					data[offset+i] = x
+			GeoPatcher_PatchHDI(data, offset, code)
 	
 	# Single Byte to Halfwidth
 	GeoPatch(
@@ -900,11 +1000,11 @@ def GeoPatcher_PatchVG2(filepath):
 		[0x80, 0x39, NEWLINE_CODE],
 	)
 	
-	print("> Applying halfwidth patch to:", filepath)
-	f = open(filepath, 'wb')
+	print("> Applying halfwidth patch to:", hdipath)
+	f = open(hdipath, 'wb')
 	f.write(data)
 	f.close()
-	
+
 # ==============================================================================
 # MAIN
 # ==============================================================================
@@ -913,10 +1013,12 @@ def main():
 	argc = len(sys.argv)
 	argv = list(sys.argv)
 	
+	# Print flavor
 	if argc <= 1:
 		print(ASCII_ART)
 		print("=== GeoPatcher.py v%s by @vGeoXIII ===========" % str(VERSION))
 		print(HELP_STR)
+
 	# Help .........................................
 	elif argv[1] == "-h":
 		print(HELP_STR)
@@ -947,6 +1049,14 @@ def main():
 		fdir = argv[2]
 		if fdir and os.path.exists(fdir):
 			GeoPatcher_SearchBytes(fdir, argv[3])
+	# Compare Bytes .......................................
+	elif argv[1] == "-cmp":
+		if argc == 4:
+			GeoPatcher_BinaryCmpPrint(argv[2], argv[3])
+		elif argc == 5:
+			GeoPatcher_BinaryCmpPrint(argv[2], argv[3], argv[4])
+		else:
+			GeoPatcher_BinaryCmpPrint(argv[2], argv[3], argv[4], argv[5])
 	# File Operations ..............................
 	else:
 		pathhdi = ""
@@ -971,11 +1081,22 @@ def main():
 					GeoPatcher_GenerateLocalizerFile(pathhdi, pathlcl, deep_search=True)
 			# Translate
 			elif v == "-t":
-				if not pathlcl and pathhdi:
-					pathlcl = pathhdi+".geolcl"
-				if pathlcl:
-					GeoPatcher_TranslateLocalizerFile(pathlcl, pathlcl)
-			# Write
+				has_translator = True
+				try:
+					TranslateJP("武内優香")
+				except:
+					has_translator = False
+				
+				# Translate shell check
+				if not has_translator:
+					print("> translate-shell not found. Install at:")
+					print("\thttps://github.com/soimort/translate-shell")
+				else:
+					if not pathlcl and pathhdi:
+						pathlcl = pathhdi+".geolcl"
+					if pathlcl:
+						GeoPatcher_TranslateLocalizerFile(pathlcl, pathlcl)
+				# Write
 			elif v == "-w":
 				if not pathlcl and pathhdi:
 					pathlcl = pathhdi+".geolcl"
@@ -993,6 +1114,22 @@ def main():
 					if v and v[-4:] == ".hdi":
 						GeoPatcher_PatchVG2(v)
 						break
-
+			# Debugging patches
+			elif v == "-p_p1zero":
+				f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
+				GeoPatcher_PatchHDI(data, 0x0020FE13, [0x00])
+				f = open(pathhdi, 'wb'); f.write(data); f.close()
+				print("> Patch applied: Player1 Zero Health")
+			elif v == "-p_p2zero":
+				f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
+				GeoPatcher_PatchHDI(data, 0x0020FE19, [0x01])
+				f = open(pathhdi, 'wb'); f.write(data); f.close()
+				print("> Patch applied: Player2 Zero Health")
+			elif v == "-p_thintext":
+				f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
+				for offset in [0x20EFAB, 0x21B667, 0x21B786, 0x236EDF]:
+					GeoPatcher_PatchHDI(data, offset, [0xB1,0x03,0xD3,0xE0,0x50,0x90,0x90,0x90,0x90,0x90])
+				f = open(pathhdi, 'wb'); f.write(data); f.close()
+				print("> Patch applied: Thin Text")
 main()
 
