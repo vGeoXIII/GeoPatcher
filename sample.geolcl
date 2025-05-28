@@ -1,0 +1,28 @@
+# vg2.hdi
+# Generated translation script file by @GeoXIII
+# Parameters are read per line in a looping order:
+#     Bytelength Offset1 Offset2 ...
+#		- First value is the maximum size of the source text being replaced.
+#		- Following values are offsets to write the text line to.
+#     ReplacementText
+#		- Line breaks are done with "\n"
+#		- Once the text line is read, bytelength and offsets are cleared for next item.
+# (Lines starting with hashtag "#" are comments and skipped during parse)
+# ======================================================================
+
+
+25 0x00218F50 0x00233E26
+# Src: 「ＶＧ選手、武内優香。」\n
+# MTL: "VG player Takeuchi Yuka."\n
+"VG Senshi Takeuchi Yuka."\n
+
+29 0x00218F6A 0x00233E40
+# Src: 「ボク、本気で闘るからね。」\n
+# MTL: "I'm going to fight seriously."\n
+"I won't hold back."\n
+
+49 0x00218F88 0x00233E5E
+# Src: 「・・・何があっても、絶対にキミを倒すよッ！！」\n
+# MTL: "No matter what happens, I'll definitely defeat you!!"\n
+"No matter what happens, I'll defeat you!!"\n
+
