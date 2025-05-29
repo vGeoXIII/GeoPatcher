@@ -8,15 +8,18 @@ import os
 
 VERSION = (0,1,0)
 
+# Python's default encoding differs per OS. Set explicitly for text files.
+ENCODING_EN = 'utf-8'	# Used for generated text files
+ENCODING_JP = 'shift_jis' 	# Used when translating.
+
 APPLY_ERROR_MAX = 10
 SEARCH_EXT_EXCLUDE = ".bmp .png .zip .7z .rar".split()
-ENCODING_JP = 'shift_jis'
-ENCODING_EN = 'utf-8'
 DEFAULT_SEARCH_KEYS = "・・・。,"
-ZEROPADDING = b'\x00' * 100
 
+ZEROPADDING = b'\x00' * 100
 NEWLINE_CODE = 0x0A 	# Patch newline code
 JPFIRSTBYTERANGE = (0x80, 0x9F)
+JPSEARCH_REGIONWIDTH = 0x500
 
 HELP_STR = "\n".join([
 "GeoPatcher.py v%s" % str(VERSION),
@@ -161,43 +164,14 @@ HexString = lambda value, digits=8, space=False: "".join(["0123456789ABCDEF"[(va
 HexRead = lambda hexstring: sum(["0123456789ABCDEF".index(c) * (1<<(i*4)) for i,c in enumerate(hexstring.replace("0x", "").upper()[::-1]) if c in "01234567890ABCDEFG"])
 HexStringBytes = lambda hexstring: bytes([HexRead(text[i:i+2]) for text in [hexstring.replace("0x","").replace(" ", "")] for i in range(0, len(text), 2)]) if isinstance(hexstring, str) else hexstring
 
-# Returns string with translated text
+# Returns string with translated text using translate-shell cli
 def TranslateJP(jptext):
 	translation = subprocess.check_output(["trans", "-b", "ja:", jptext]).decode('utf-8')
 	# Only use first line from cil
 	if "\n" in translation:
 		translation = translation.split("\n")[0]
-	translation = translation[:-1] # Get rid of newline at the end
+	translation = translation.rstrip("\n") # Get rid of newline at the end
 	return translation
-
-# Converts letters to their shift_jis counterparts 
-def JPLetters(text, linenum=0):
-	unknowns = []
-	jptext = ""
-	text = text.replace("...", JPCHARMAP["..."])
-	for c in text:
-		# Charmap
-		if c in JPCHARMAP.keys():
-			jptext += JPCHARMAP[c]
-		else:
-			# Japanese characters
-			try:
-				if tuple(c.encode(ENCODING_JP)) > tuple((0x81, 0x00)):
-					jptext += c
-				else:
-					unknowns.append((c, c.encode(ENCODING_JP)))
-					jptext += JPCHARUNKNOWN
-			# Unknown
-			except:
-				unknowns.append((c, ord(c)))
-				jptext += JPCHARUNKNOWN
-	
-	if unknowns:
-		print(linenum)
-		print("EN:", text)
-		print("JP:", jptext)
-		print("Unknowns:", str([x for x in list(set(unknowns))]))
-	return jptext
 
 # Converts letters to their in-game counterparts
 def LettersToVGBytes(text, linenum=0):
@@ -527,7 +501,7 @@ def GeoPatcher_GenerateLocalizerFile(srcpath, outpath="", deep_search=True):
 	searchregions = []
 	regionstart = 0
 	regionend = 0
-	regionsep = 0x1000
+	regionwidth = JPSEARCH_REGIONWIDTH
 	
 	# Method 1: Look for quoted Japanese text. Mostly character dialogue
 	i = 0
@@ -563,32 +537,6 @@ def GeoPatcher_GenerateLocalizerFile(srcpath, outpath="", deep_search=True):
 							# Extend region
 							else:
 								regionend = i
-					# Use this to locate strings
-					else:
-						if data[i] == 0x6e: # Ensure newline is included
-							i += 1
-						textbytes = data[offset:i]
-						
-						# Handle null characters found between quotes
-						while 0x00 in textbytes:
-							inull = textbytes.index(0x00)
-							try:
-								text = textbytes[:inull].decode(ENCODING_JP)
-								if len(text) > 4:
-									AddTextItem(textbytes[:inull], offset)
-									offset += inull+1
-									textbytes = textbytes[inull+1:]
-									hits += 1
-							except:
-								print("Error parsing Shift-JIS at offset 0x%s:" % HexString(offset, 8), " ".join([HexString(x, 2) for x in textbytes[:inull]]))
-								textbytes = []
-								break
-						# Add to list of text items
-						if textbytes:
-							text = textbytes.decode(ENCODING_JP)
-							if len(text) > 4:
-								AddTextItem(textbytes, offset)
-								hits += 1
 		i += 1
 	
 	# Method 2: Search for ShiftJIS pattern using fullwidth bytes. Finds almost ALL strings
@@ -702,7 +650,7 @@ def GeoPatcher_DictionaryFile(outpath, translation_map=None, keyorder=None):
 	mode = 0
 	block = []
 	for line in srclines:
-		line = line[:-1]
+		line = line.rstrip('\n')
 		if not line or line[0] == "#":
 			if block and block[-1] != "":
 				block.append(line)
@@ -825,7 +773,7 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 				print("%3d%% (%4d/%4d Lines left)" % (progress_percent, linehits, totallinecount))
 			progress_percent += progress_step
 		
-		srcline = srcline[:-1]	# Exclude newline char
+		srcline = srcline.rstrip('\n')	# Exclude newline char
 		
 		# Empty Line
 		if len(srcline) == 0:
@@ -833,7 +781,7 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 		# Comment line
 		elif srcline[0] == "#":
 			if "# Src: " in srcline:
-				original = srcline[len("# Src: "):][:-1]
+				original = srcline[len("# Src: "):]
 				original_comment = True
 			outlineblock.append(srcline)
 		# Offset Line
@@ -849,7 +797,7 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 				original = srcline
 			
 			# Original Japanese line found in comment or current line
-			if original.strip():
+			if original and original.strip():
 				translation = None
 				# Check if original is already translated (prevents unnecessary calls to translator)
 				if original in translation_map.keys():
@@ -857,6 +805,7 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 				# Use cli translator program to translate string
 				elif has_translator:
 					# Call cli translator
+					print([original])
 					translation = TranslateJP(original)
 					
 					# Add newline character from original
@@ -897,6 +846,9 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 		else:
 			outlineblock.append(srcline)
 	
+	if queue_save:
+		GeoPatcher_DictionaryFile(dictionary_path, translation_map, translation_order)
+	
 	if outlineblock:
 		outlines += outlineblock
 		
@@ -935,7 +887,7 @@ def GeoPatcher_ApplyLocalizerFile(localizer_filepath, target_filepath=""):
 	
 	mode = 0
 	for lineindex, line in enumerate(flines):
-		line = line[:-1]
+		line = line.rstrip('\n')
 		if not line or line[0] == "#":
 			continue
 		# Offset line
@@ -961,8 +913,11 @@ def GeoPatcher_ApplyLocalizerFile(localizer_filepath, target_filepath=""):
 			
 			# Write to offsets
 			for offset in offsets:
-				data[offset:offset+size] = (textbytes+ZEROPADDING)[:size]
-				data[offset+size] = 0
+				if offset+size < len(data):
+					data[offset:offset+size] = (textbytes+ZEROPADDING)[:size]
+					data[offset+size] = 0
+				else:
+					print("! Offset too large:", HexString(offset), line)
 			mode = 0
 	
 	for lineindex, offset, size, textbytes, line in largelist[::-1][:APPLY_ERROR_MAX]:
