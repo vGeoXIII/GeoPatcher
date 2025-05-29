@@ -529,9 +529,9 @@ def GeoPatcher_GenerateLocalizerFile(srcpath, outpath="", deep_search=True):
 						# In region
 						else:
 							# Offset difference is too large: split region
-							if i-regionend > regionsep:
-								print((HexString(regionstart), HexString(regionend)))
-								searchregions.append((regionstart-regionsep, regionend+regionsep))
+							if i-regionend > regionwidth:
+								print((HexString(regionstart), HexString(regionwidth)))
+								searchregions.append((regionstart-regionwidth, regionend+regionwidth))
 								regionstart = 0x00
 								regionend = 0x00
 							# Extend region
