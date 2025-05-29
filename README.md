@@ -10,7 +10,7 @@ A demo translation patch is provided as an ![xDelta file](https://github.com/vGe
 ## GeoPatcher.py
 Tool for extracting, editing, and patching text data from VGII. Run in shell/cli with:  
 `python GeoPatcher.py <mode> <arg> <arg> <...>`  
-Commands: 
+
 ```
 ---File Commands-----------------------------------------------
 (File commands can be passed together in one call)
@@ -49,6 +49,8 @@ Commands:
     - Software used to play and debug pc98 games. Originally modified to debug the Touhou series of pc98 games.
 - [translate-shell](https://github.com/soimort/translate-shell):
     - A command line tool for translating text. GeoPatcher.py makes calls to this for translations.
+- [xDelta](https://www.romhacking.net/utilities/598/):
+    - Program to create patches for files that can be easily distributed. (Might be obselete.)
 - ["How to translate pc98 games (.hdi files)"](https://youtu.be/rWMU0fcJZHE?si=hgzjCP3YQxxYR6ku) by @bunnelbi
     - Describes a method of locating and replacing Japanese text via hex editors.
 - ["Modifying text display ASM in Rusty"](https://46okumen.com/2019/03/05/modifying-text-display-asm-in-rusty-folkulore-part-4/) on 46okumen.com
@@ -56,8 +58,7 @@ Commands:
 - ["Complete Character List for Shift_JIS"](https://www.fileformat.info/info/charset/Shift_JIS/list.htm)
     - Table of Japanese characters for the encoding format used in pc98 games.
 
-I have a write-up on the development of GeoPatcher for VGII on this ![Wiki page](https://github.com/vGeoXIII/GeoPatcher/blob/main/VG2-EN_MTL.xdelta).
-
 ---
+I have a write-up on the development of GeoPatcher for VGII on this ![Wiki page](https://github.com/vGeoXIII/GeoPatcher/blob/main/VG2-EN_MTL.xdelta).
 
 
