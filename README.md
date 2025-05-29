@@ -4,11 +4,16 @@ GitHub: https://github.com/vGeoXIII/GeoPatcher
 Project for streamlining the translation process of editing pc98 games.  
 Originally designed for editing "Variable Geo II: Bout of Cabalistic Goddess" by GIGA.
 
-A demo translation patch is provided as an ![xDelta file](https://github.com/vGeoXIII/GeoPatcher/blob/main/VG2-EN_MTL.xdelta).  
+A demo translation patch is provided as an ![xDelta file](https://github.com/vGeoXIII/GeoPatcher/releases/tag/Translation_Exports).  
 ![Yuka Translation](https://github.com/vGeoXIII/GeoPatcher/blob/main/images/yuka_prefight.BMP)
 
+If you wish to provide your own translation for this project, contact me via:
+- Email: geoxiii@proton.me
+- twXtter: https://x.com/vGeoXIII
+- Or create an issue on GitHub.
+
 ## GeoPatcher.py
-Tool for extracting, editing, and patching text data from VGII. Run in shell/cli with:  
+Tool for extracting, editing, and patching text data in VGII. Run in shell/cli with:  
 `python GeoPatcher.py <mode> <arg> <arg> <...>`  
 
 ```
@@ -58,7 +63,5 @@ Tool for extracting, editing, and patching text data from VGII. Run in shell/cli
 - ["Complete Character List for Shift_JIS"](https://www.fileformat.info/info/charset/Shift_JIS/list.htm)
     - Table of Japanese characters for the encoding format used in pc98 games.
 
----
-I have a write-up on the development of GeoPatcher for VGII on this ![Wiki page](https://github.com/vGeoXIII/GeoPatcher/blob/main/VG2-EN_MTL.xdelta).
 
 
