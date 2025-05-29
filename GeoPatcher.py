@@ -8,6 +8,7 @@ import os
 
 VERSION = (0,1,0)
 
+APPLY_ERROR_MAX = 10
 SEARCH_EXT_EXCLUDE = ".bmp .png .zip .7z .rar".split()
 ENCODING_JP = 'shift_jis'
 ENCODING_EN = 'utf-8'
@@ -205,7 +206,7 @@ def LettersToVGBytes(text, linenum=0):
 	i = 0
 	while i < n:
 		c = text[i]
-		if c == "\\" and text[i+1] == "n":
+		if c == "\\" and i+1 < n and text[i+1] == "n":
 			outbytes.append(NEWLINE_CODE)
 			i += 1
 		elif c in VGCHARMAP.keys():
@@ -670,7 +671,7 @@ def GeoPatcher_GenerateLocalizerFile(srcpath, outpath="", deep_search=True):
 		print("> No files were changed")
 	else:
 		print("Hits:", hits, "| Offsets:", len(textitems))
-		f = open(outpath, 'w')
+		f = open(outpath, 'w', encoding=ENCODING_EN)
 		f.write(outtext)
 		f.close()
 		
@@ -693,7 +694,7 @@ def GeoPatcher_DictionaryFile(outpath, translation_map=None, keyorder=None):
 	
 	# Read previous dictionary
 	if os.path.exists(outpath):
-		f = open(outpath, "r")
+		f = open(outpath, "r", encoding=ENCODING_EN)
 		srclines = [x for x in f]
 		f.close()
 	
@@ -746,7 +747,7 @@ def GeoPatcher_DictionaryFile(outpath, translation_map=None, keyorder=None):
 	outtext = "\n".join([line for k,block in outblocks for line in block])
 	
 	# Write to output
-	f = open(outpath, "w")
+	f = open(outpath, "w", encoding=ENCODING_EN)
 	f.write(outtext)
 	f.close()
 	
@@ -757,8 +758,20 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 	if not outpath:
 		outpath = localizer_filepath
 	
+	# Translattor cil check
+	has_translator = True
+	try:
+		TranslateJP("武内優香")
+	except:
+		has_translator = False
+	
+	# Translate shell check
+	if not has_translator:
+		print("> translate-shell not found. Install from:")
+		print("\thttps://github.com/soimort/translate-shell")
+	
 	# Read localization file
-	f = open(localizer_filepath, "r")
+	f = open(localizer_filepath, "r", encoding=ENCODING_EN)
 	flines = [x for x in f]
 	f.close()
 	
@@ -773,7 +786,7 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 	translation_order = []
 	
 	def WritePartofFile(path, currentlines, restoflines):
-		f = open(outpath, "w")
+		f = open(outpath, "w", encoding=ENCODING_EN)
 		f.write("\n".join(currentlines) + "".join(restoflines))
 		f.close()
 	
@@ -792,6 +805,7 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 	offsetline = ""
 	hits = 0
 	linehits = 0
+	skippedhits = 0
 	queue_save = False
 	mode = 0
 	original = None
@@ -836,11 +850,12 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 			
 			# Original Japanese line found in comment or current line
 			if original.strip():
+				translation = None
 				# Check if original is already translated (prevents unnecessary calls to translator)
 				if original in translation_map.keys():
 					translation = translation_map[original]
 				# Use cli translator program to translate string
-				else:
+				elif has_translator:
 					# Call cli translator
 					translation = TranslateJP(original)
 					
@@ -858,17 +873,23 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 						translation = CleanDuplicateStrings(translation, 3, 10, 4)
 					# Add new translation to translation map
 					translation_map[original] = translation
+				else:
+					skippedhits += 1
 				# Add lines to output
-				translation_order.append(original)
-				if not original_comment:
-					outlineblock.append("# Src: " + original)
-					outlineblock.append("# MTL: " + translation)
-				outlineblock.append(translation)
+				if translation:
+					translation_order.append(original)
+					if not original_comment:
+						outlineblock.append("# Src: " + original)
+						outlineblock.append("# MTL: " + translation)
+					outlineblock.append(translation)
+					queue_save = True
+				# No translation, no change to line
+				else:
+					outlineblock.append(srcline)
 			# No JP parsed. No change to line
 			else:
 				outlineblock.append(srcline)
 			
-			queue_save = True
 			mode = 0
 			original = None
 			original_comment = False
@@ -878,9 +899,12 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 	
 	if outlineblock:
 		outlines += outlineblock
+		
+	if skippedhits:
+		print("> %d line(s) skipped" % skippedhits)
 	
 	# Write to file
-	f = open(outpath, "w")
+	f = open(outpath, "w", encoding=ENCODING_EN)
 	f.write("\n".join(outlines))
 	f.close()
 	
@@ -891,7 +915,7 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 # Writes lcl file translated lines to their original offsets for use with halfwidth patch.
 def GeoPatcher_ApplyLocalizerFile(localizer_filepath, target_filepath=""):
 	# Read localization file
-	f = open(localizer_filepath, "r", encoding='utf-8')
+	f = open(localizer_filepath, "r", encoding=ENCODING_EN)
 	flines = [x for x in f]
 	f.close()
 	
@@ -941,8 +965,10 @@ def GeoPatcher_ApplyLocalizerFile(localizer_filepath, target_filepath=""):
 				data[offset+size] = 0
 			mode = 0
 	
-	for lineindex, offset, size, textbytes, line in largelist[::-1]:
+	for lineindex, offset, size, textbytes, line in largelist[::-1][:APPLY_ERROR_MAX]:
 		print("L%4d 0x%s too large (%2d < %2d):" % (lineindex, HexString(offset), size, len(textbytes)), line)
+	if len(largelist) > APPLY_ERROR_MAX:
+		print("> Displayed first %d/%d line errors" % (APPLY_ERROR_MAX, len(largelist)))
 	
 	# Write to target file
 	if len(data) != srcsize:
@@ -951,7 +977,7 @@ def GeoPatcher_ApplyLocalizerFile(localizer_filepath, target_filepath=""):
 		f = open(target_filepath, "wb")
 		f.write(data)
 		f.close()
-		print("> New text written to game: \"%s\"" % target_filepath)
+		print("> New text written to game file: \"%s\"" % target_filepath)
 
 # ......................................................................
 
@@ -1018,118 +1044,111 @@ def main():
 		print(ASCII_ART)
 		print("=== GeoPatcher.py v%s by @vGeoXIII ===========" % str(VERSION))
 		print(HELP_STR)
-
+	# Patch single HDI file
+	elif argc == 2 and os.path.exists(argv[1]):
+		argv += ["-r", "-t", "-w", "-p"]
+	
 	# Help .........................................
-	elif argv[1] == "-h":
-		print(HELP_STR)
-	# Convert .........................................
-	elif argv[1] == "-c" or argv[1] == "-cc" or argv[1] == "-cb":
-		text = argv[2]
-		if argv[1] != "-cb":
-			textbytes = LettersToVGBytes(text)
-		else:
-			textbytes = text.encode(ENCODING_JP)
-			
-		if argv[1] == "-cc":
-			print(" ".join([HexString(0x85, 2) + HexString(x, 2) for x in textbytes]))
-		else:
-			print(" ".join([HexString(x, 2) for x in textbytes]))
-	# Search Text .......................................
-	elif argv[1] == "-s":
-		fdir = argv[2]
-		keys = argv[3]
-		if not keys:
-			keys = DEFAULT_SEARCH_KEYS
-		elif argc > 4:
-			keys = argv[3:]
-		if fdir and os.path.exists(fdir):
-			GeoPatcher_SearchKeys(fdir, keys)
-	# Search Bytes .......................................
-	elif argv[1] == "-sb":
-		fdir = argv[2]
-		if fdir and os.path.exists(fdir):
-			GeoPatcher_SearchBytes(fdir, argv[3])
-	# Compare Bytes .......................................
-	elif argv[1] == "-cmp":
-		if argc == 4:
-			GeoPatcher_BinaryCmpPrint(argv[2], argv[3])
-		elif argc == 5:
-			GeoPatcher_BinaryCmpPrint(argv[2], argv[3], argv[4])
-		else:
-			GeoPatcher_BinaryCmpPrint(argv[2], argv[3], argv[4], argv[5])
-	# File Operations ..............................
-	else:
-		pathhdi = ""
-		pathlcl = ""
-		pathother = ""
-		
-		# Find paths in arguments
-		for v in argv[1:]:
-			vlower = v.lower()
-			if ".lcl" in vlower or '.geolcl' in vlower:
-				pathlcl = v
-			elif vlower[-4:] == ".hdi":
-				pathhdi = v
-			elif "-" not in v:
-				pathother = v
-		
-		# File operations
-		for v in argv[1:]:
-			# Read
-			if v == "-r":
-				if pathhdi:
-					GeoPatcher_GenerateLocalizerFile(pathhdi, pathlcl, deep_search=True)
-			# Translate
-			elif v == "-t":
-				has_translator = True
-				try:
-					TranslateJP("武内優香")
-				except:
-					has_translator = False
+	if argc > 1:
+		if argv[1] == "-h":
+			print(HELP_STR)
+		# Convert .........................................
+		elif argv[1] == "-c" or argv[1] == "-cc" or argv[1] == "-cb":
+			text = argv[2]
+			if argv[1] != "-cb":
+				textbytes = LettersToVGBytes(text)
+			else:
+				textbytes = text.encode(ENCODING_JP)
 				
-				# Translate shell check
-				if not has_translator:
-					print("> translate-shell not found. Install at:")
-					print("\thttps://github.com/soimort/translate-shell")
-				else:
+			if argv[1] == "-cc":
+				print(" ".join([HexString(0x85, 2) + HexString(x, 2) for x in textbytes]))
+			else:
+				print(" ".join([HexString(x, 2) for x in textbytes]))
+		# Search Text .......................................
+		elif argv[1] == "-s":
+			fdir = argv[2]
+			keys = argv[3]
+			if not keys:
+				keys = DEFAULT_SEARCH_KEYS
+			elif argc > 4:
+				keys = argv[3:]
+			if fdir and os.path.exists(fdir):
+				GeoPatcher_SearchKeys(fdir, keys)
+		# Search Bytes .......................................
+		elif argv[1] == "-sb":
+			fdir = argv[2]
+			if fdir and os.path.exists(fdir):
+				GeoPatcher_SearchBytes(fdir, argv[3])
+		# Compare Bytes .......................................
+		elif argv[1] == "-cmp":
+			if argc == 4:
+				GeoPatcher_BinaryCmpPrint(argv[2], argv[3])
+			elif argc == 5:
+				GeoPatcher_BinaryCmpPrint(argv[2], argv[3], argv[4])
+			else:
+				GeoPatcher_BinaryCmpPrint(argv[2], argv[3], argv[4], argv[5])
+		# File Operations ..............................
+		else:
+			pathhdi = ""
+			pathlcl = ""
+			pathother = ""
+			
+			# Find paths in arguments
+			for v in argv[1:]:
+				vlower = v.lower()
+				if ".lcl" in vlower or '.geolcl' in vlower:
+					pathlcl = v
+				elif vlower[-4:] == ".hdi":
+					pathhdi = v
+				elif "-" not in v:
+					pathother = v
+			
+			# File operations
+			for v in argv[1:]:
+				# Read
+				if v == "-r":
+					if pathhdi:
+						GeoPatcher_GenerateLocalizerFile(pathhdi, pathlcl, deep_search=True)
+				# Translate
+				elif v == "-t":
 					if not pathlcl and pathhdi:
 						pathlcl = pathhdi+".geolcl"
 					if pathlcl:
 						GeoPatcher_TranslateLocalizerFile(pathlcl, pathlcl)
-				# Write
-			elif v == "-w":
-				if not pathlcl and pathhdi:
-					pathlcl = pathhdi+".geolcl"
-				if not pathhdi and pathlcl:
-					pathhdi = pathlcl.replace(".geolcl", ".hdi").replace(".lcl", ".hdi")
-				if pathlcl == pathhdi:
-					print("> Filenames are the same!")
-				else:
-					print("In: ", pathlcl)
-					print("Out:", pathhdi)
-					GeoPatcher_ApplyLocalizerFile(pathlcl, pathhdi)
-			# VG2 Patch
-			elif v == "-p":
-				for v in argv[1:]:
-					if v and v[-4:] == ".hdi":
-						GeoPatcher_PatchVG2(v)
-						break
-			# Debugging patches
-			elif v == "-p_p1zero":
-				f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
-				GeoPatcher_PatchHDI(data, 0x0020FE13, [0x00])
-				f = open(pathhdi, 'wb'); f.write(data); f.close()
-				print("> Patch applied: Player1 Zero Health")
-			elif v == "-p_p2zero":
-				f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
-				GeoPatcher_PatchHDI(data, 0x0020FE19, [0x01])
-				f = open(pathhdi, 'wb'); f.write(data); f.close()
-				print("> Patch applied: Player2 Zero Health")
-			elif v == "-p_thintext":
-				f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
-				for offset in [0x20EFAB, 0x21B667, 0x21B786, 0x236EDF]:
-					GeoPatcher_PatchHDI(data, offset, [0xB1,0x03,0xD3,0xE0,0x50,0x90,0x90,0x90,0x90,0x90])
-				f = open(pathhdi, 'wb'); f.write(data); f.close()
-				print("> Patch applied: Thin Text")
+					# Write
+				elif v == "-w":
+					if not pathlcl and pathhdi:
+						pathlcl = pathhdi+".geolcl"
+					if not pathhdi and pathlcl:
+						pathhdi = pathlcl.replace(".geolcl", ".hdi").replace(".lcl", ".hdi")
+					if pathlcl == pathhdi:
+						print("> Filenames are the same!")
+					else:
+						print("In: ", pathlcl)
+						print("Out:", pathhdi)
+						GeoPatcher_ApplyLocalizerFile(pathlcl, pathhdi)
+				# VG2 Patch
+				elif v == "-p":
+					for v in argv[1:]:
+						if v and v[-4:] == ".hdi":
+							GeoPatcher_PatchVG2(v)
+							break
+				# Debugging patches
+				elif v == "-p_p1zero":
+					f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
+					GeoPatcher_PatchHDI(data, 0x0020FE13, [0x00])
+					f = open(pathhdi, 'wb'); f.write(data); f.close()
+					print("> Patch applied: Player1 Zero Health")
+				elif v == "-p_p2zero":
+					f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
+					GeoPatcher_PatchHDI(data, 0x0020FE19, [0x01])
+					f = open(pathhdi, 'wb'); f.write(data); f.close()
+					print("> Patch applied: Player2 Zero Health")
+				elif v == "-p_thintext":
+					f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
+					for offset in [0x20EFAB, 0x21B667, 0x21B786, 0x236EDF]:
+						GeoPatcher_PatchHDI(data, offset, [0xB1,0x03,0xD3,0xE0,0x50,0x90,0x90,0x90,0x90,0x90])
+					f = open(pathhdi, 'wb'); f.write(data); f.close()
+					print("> Patch applied: Thin Text")
 main()
 
