@@ -38,6 +38,7 @@ Commands:
 -cb <str>
    Prints given string as bytes
 -p_<cheat>
+   Extra patches to speed up testing.
    -p_p1zero : Start player 1 with 0 health
    -p_p2zero : Start player 2 with 0 health
    -p_thintext : Displays text at single pixel width
