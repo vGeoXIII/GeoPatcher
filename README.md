@@ -5,6 +5,8 @@ Project for streamlining the translation process of editing pc98 games.
 Originally designed for editing "Variable Geo II: Bout of Cabalistic Goddess" by GIGA.
 
 A demo translation patch is provided as an ![xDelta file](https://github.com/vGeoXIII/GeoPatcher/releases/tag/Translation_Exports).  
+A SFW patch is available as well: ![xDelta file](https://github.com/vGeoXIII/GeoPatcher/blob/main/VG2-SFW.xdelta).  
+
 ![Yuka Translation](https://github.com/vGeoXIII/GeoPatcher/blob/main/images/yuka_prefight.BMP)
 
 If you wish to provide your own translation for this project, contact me via:
@@ -44,6 +46,7 @@ Tool for extracting, editing, and patching text data in VGII. Run in shell/cli w
    Prints given string as bytes
 -p_<cheat>
    Extra patches to speed up testing.
+   -p_sfw : Disables post-match scene for single player mode
    -p_p1zero : Start player 1 with 0 health
    -p_p2zero : Start player 2 with 0 health
    -p_thintext : Displays text at single pixel width
