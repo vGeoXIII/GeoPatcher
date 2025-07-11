@@ -898,8 +898,9 @@ def GeoPatcher_ApplyLocalizerFile(localizer_filepath, target_filepath=""):
 			size = int(lineinfo[0])
 			offsets = [HexRead(x) for x in lineinfo[1:]]
 			mode = 1
+		# Replacement line
 		elif mode == 1:
-			line = line.replace("\" ", "\"").replace(" \"", "\"")
+			line = line.replace("\" ", "\"").replace(" \"", "\"").replace("/n", "\\n")
 			
 			# Convert to in-game bytes
 			textbytes = LettersToVGBytes(line, lineindex+1)
