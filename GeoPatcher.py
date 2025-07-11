@@ -48,6 +48,8 @@ HELP_STR = "\n".join([
 "\tText that exceeds original bytelength is truncated when writing to game_file",
 "-p vg2_hdi \t\tPatches VG2 hdi file to display halfwidth characters.",
 "-p_<cheat> vg2_hdi \tPatches VG2 hdi file with cheat from list:",
+"\t-p_sfw \tDisables H-scenes after 1P matches",
+"\t-p_nsfw \tEnables H-scenes after 1P matches",
 "\t-p_p1zero \tStarts player 1 with 0 health",
 "\t-p_p2zero \tStarts player 2 with 0 health",
 "\t-p_thintext \tDisplays text at single pixel width",
@@ -1003,7 +1005,7 @@ def main():
 	elif argc == 2 and os.path.exists(argv[1]):
 		argv += ["-r", "-t", "-w", "-p"]
 	
-	# Help .........................................
+	# Commands .........................................
 	if argc > 1:
 		if argv[1] == "-h":
 			print(HELP_STR)
@@ -1089,6 +1091,18 @@ def main():
 							GeoPatcher_PatchVG2(v)
 							break
 				# Debugging patches
+				elif v == "-p_sfw":
+					f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
+					for offset in [0x0021E706]:
+						GeoPatcher_PatchHDI(data, offset, [0xEB]) # <- Change jnz (0x75XX) to jmp (0xEBXX)
+					f = open(pathhdi, 'wb'); f.write(data); f.close()
+					print("> Patch applied: Safe-For-Work Enabled")
+				elif v == "-p_nsfw":
+					f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
+					for offset in [0x0021E706]:
+						GeoPatcher_PatchHDI(data, offset, [0x75]) # <- Set to jnz (0x75XX)
+					f = open(pathhdi, 'wb'); f.write(data); f.close()
+					print("> Patch applied: NSFW Enabled")
 				elif v == "-p_p1zero":
 					f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
 					GeoPatcher_PatchHDI(data, 0x0020FE13, [0x00])
