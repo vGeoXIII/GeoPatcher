@@ -34,8 +34,8 @@ HELP_STR = "\n".join([
 "-s file_or_dir <str> <str> <...> \tScan and report instances of str(s) in file or directory.",
 "-sb file_or_dir <hex> <hex> <...> \tScan and report instances of hex in file or directory.",
 "-cmp bin1 bin2 <keybytes1> <keybytes2> \t\tPrints offsets of keybytes changes found in two binary files.",
-"\tCompares incremented values if no keys are given",
-"\tCompares any changes if first key are given",
+"\tCompares any changes between files",
+"\tCompares any changes from first key if <keybytes1> given",
 "\tCompares specific change from key1 to key2 if both keys are given",
 "--File Commands----------------------------------",
 "-r game_file <lcl_file>\tRead quoted text from game_file and generate lcl_file for text editing.",
@@ -195,16 +195,8 @@ def LettersToVGBytes(text, linenum=0):
 		if c == "\\" and i+1 < n and text[i+1] == "n":
 			outbytes.append(NEWLINE_CODE)
 			i += 1
-		elif c in VGCHARMAP.keys():
-			outbytes.append(VGCHARMAP[c])
-		elif c in '0123456789':
-			outbytes.append(ord(c)-ord('0')+0x4F)
-		elif c in 'qwertyuiopasdfghjklzxcvbnm'.upper():
-			outbytes.append(ord(c)-ord('A')+0x60)
-		elif c in 'qwertyuiopasdfghjklzxcvbnm'.lower():
-			outbytes.append(ord(c)-ord('a')+0x81)
 		else:
-			pass
+			outbytes.append(ord(c) & 0xFF)
 		i += 1
 	return bytes(outbytes)
 
@@ -313,20 +305,27 @@ def GeoPatcher_BinaryCmpPrint(fpath1, fpath2, hexbytes=None, newbytes=None):
 	
 	offset = 0
 	
-	# Compare increases by 1
+	# Compare changes by line
 	if not newbytes and not hexbytes:
 		b1 = bin1
 		b2 = bin2
+		totalhits = 0
 		while offset < n-1:
 			# Test L v. R:
-			if b1[offset] == (b2[offset]-1):
-				# Print difference
-				print(
-					HexString(offset), 
-					"".join([HexString(x, 2) for x in b1[offset:offset+1]]), 
-					"".join([HexString(x, 2) for x in b2[offset:offset+1]]), 
-					)
-			offset += 1
+			if tuple(b1[offset:offset+16]) != tuple(b2[offset:offset+16]):
+				# Print differences in lines
+				offsetstr = "0x"+HexString(offset)
+				differences = [b2[offset+i]-b1[offset+i] for i in range(0, 16)]
+				hits = len([x for x in differences if x!=0])
+				totalhits += hits
+				print("%10s %s\n%10s %s\n%10s%s | %2d Hit(s)" % (
+					offsetstr, "  ".join([HexString(x, 2) for x in b1[offset:offset+16]]), 
+					"", "  ".join([HexString(x, 2) for x in b2[offset:offset+16]]), 
+					"", " ".join([("-+"[x>0]+HexString(abs(x),2)) if x!=0 else "   " for x in differences]),
+					hits
+				))
+			offset += 16
+		print("Total Hits:", totalhits)
 	# Compare any changes
 	elif not newbytes:
 		while offset < n-ksize:
@@ -953,6 +952,8 @@ def GeoPatcher_ApplyLocalizerFile(localizer_filepath, target_filepath=""):
 def GeoPatcher_PatchHDI(hdibytes, offset, codebytes):
 	n = len(codebytes)
 	for i,x in enumerate(codebytes):
+		if x == None:
+			x = 0x90
 		if x >= 0:
 			hdibytes[offset+i] = x
 
@@ -970,7 +971,8 @@ def GeoPatcher_PatchVG2(hdipath):
 	GeoPatch(
 		data,
 		[0x20EF38, 0x21B5F4, 0x236E6C],
-		[0xb4,0x85,0x8b,0xf0,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90], 
+		#[0xb4,0x85,0x8b,0xf0,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90],  # Old. Uses pre-converted values
+		[0xb4,0x85,0x3c,0x60,0x72,0x02,0x04,0x01,0x04,0x1f,0x90,0x8b,0xf0], # Converts values on the fly
 	)
 	
 	# Single Byte increment
@@ -993,6 +995,18 @@ def GeoPatcher_PatchVG2(hdipath):
 		[0x20F015, 0x21B6D1, 0x236F49],
 		[0x80, 0x39, NEWLINE_CODE],
 	)
+	
+	# Change newline during winquote from "n" 6E to "\n" 0A
+	GeoPatch(
+		data,
+		[0x22CB40],
+		[0x00, NEWLINE_CODE, 0x00, NEWLINE_CODE],
+	)
+	
+	# Arcade Ending Patch
+	GeoPatch(data, [0x21B828], [0x29,0xff,0xb4,0x85,0x3c,0x60,0x72,0x02,0x04,0x01,0x04,0x1f,0x03,0xf8]) # Convert values on the fly
+	GeoPatch(data, [0x21B8CF], [0x90,0x83,0x06,0x3a,0xac,0x01]) # Byte inc + 8 px spacing
+	GeoPatch(data, [0x21B907], [0x26,0x80,0x38,0x0a]) # Newline from 6e to 0a
 	
 	print("> Applying halfwidth patch to:", hdipath)
 	f = open(hdipath, 'wb')
