@@ -5,7 +5,7 @@ Project for streamlining the translation process of editing pc98 games.
 Originally designed for editing "Variable Geo II: Bout of Cabalistic Goddess" by GIGA.
 
 A demo translation patch is provided as an ![xDelta file](https://github.com/vGeoXIII/GeoPatcher/releases/tag/Translation_Exports).  
-A SFW patch is available as well: ![xDelta file](https://github.com/vGeoXIII/GeoPatcher/blob/main/VG2-SFW.xdelta).  
+A SFW patch that removes humiliation scenes is available as well: ![xDelta file](https://github.com/vGeoXIII/GeoPatcher/blob/main/VG2-SFW.xdelta).  
 
 ![Yuka Translation](https://github.com/vGeoXIII/GeoPatcher/blob/main/images/yuka_prefight.BMP)
 
