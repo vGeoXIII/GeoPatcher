@@ -19,7 +19,7 @@ DEFAULT_SEARCH_KEYS = "・・・。,"
 ZEROPADDING = b'\x00' * 100
 NEWLINE_CODE = 0x0A 	# Patch newline code
 JPFIRSTBYTERANGE = (0x80, 0x9F)
-JPSEARCH_REGIONWIDTH = 0x500
+JPSEARCH_REGIONWIDTH = 0x400
 
 HELP_STR = "\n".join([
 "GeoPatcher.py v%s" % str(VERSION),
@@ -575,6 +575,7 @@ def GeoPatcher_GenerateLocalizerFile(srcpath, outpath="", deep_search=True):
 					if sum([data[i+o*2] in firstbytesJP and data[i+o*2+1] > 0x30 for o in range(0, minhits)]) == minhits:
 						offset = i
 						validjis = True
+						satomiflag = True
 						while i < datalen-16:
 							if data[i] == 0x6e: # Newline char
 								i += 1
@@ -582,12 +583,20 @@ def GeoPatcher_GenerateLocalizerFile(srcpath, outpath="", deep_search=True):
 								i += 2
 							elif data[i] == 0x00: # Ends with null byte
 								break
+							elif data[i] in (0xE3, 0xE9): 	# Exceptions to catch Satomi's dialogue
+								if satomiflag:
+									satomiflag = False
+									i += 2
+								else:
+									validjis = False
+									break
 							else: # Pattern error
 								validjis = False
 								break
+						
 						# Validate JIS
 						if not validjis:
-							#print("Error byte:", HexString(data[i], 2))
+							#print(HexString(offset), "Pattern Error:", " ".join([HexString(x,2) for x in data[offset:i+1]]))
 							pass
 						else:
 							size = i-offset
