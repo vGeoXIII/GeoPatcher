@@ -6,7 +6,7 @@ import os
 # CONSTANTS
 # ==============================================================================
 
-VERSION = (0,1,0)
+VERSION = (0,2,0)
 
 # Python's default encoding differs per OS. Set explicitly for text files.
 ENCODING_EN = 'utf-8'	# Used for generated text files
@@ -25,6 +25,7 @@ HELP_STR = "\n".join([
 "GeoPatcher.py v%s" % str(VERSION),
 "A tool for editing text data in \"Variable Geo II: Bout of Cabalistic Goddess\"",
 "GitHub: https://github.com/vGeoXIII/GeoPatcher",
+"Commands work for both the VG2 vanilla and the updated version in the VG Perfect Collection.",
 "!!!It is highly reccomended to back up your game files before using this program!!!",
 "--Debugging Commands---------------------------------",
 "-h \t\t\tDisplay help info",
@@ -41,6 +42,7 @@ HELP_STR = "\n".join([
 "-r game_file <lcl_file>\tRead quoted text from game_file and generate lcl_file for text editing.",
 "\tUses Japanese quotes to locate text.",
 "\tSearches for Shift-JIS code patterns to locate text.",
+"\tMust be run again if using VG2.1, as the string offsets differ between versions.",
 "-t lcl_file \t\tTranslate replacement text in localizer_file using Google Translate.",
 "\tUses \"translate-shell\" cli program from https://github.com/soimort/translate-shell",
 "\tCaches translated text to \"geodictionary.txt\" in the same directory as the lcl file.",
@@ -48,8 +50,8 @@ HELP_STR = "\n".join([
 "\tText that exceeds original bytelength is truncated when writing to game_file",
 "-p vg2_hdi \t\tPatches VG2 hdi file to display halfwidth characters.",
 "-p_<cheat> vg2_hdi \tPatches VG2 hdi file with cheat from list:",
-"\t-p_sfw \tDisables H-scenes after 1P matches",
-"\t-p_nsfw \tEnables H-scenes after 1P matches",
+"\t-p_sfw \t\tDisables Humiliation scenes after 1P matches",
+"\t-p_nsfw \tEnables Humiliation scenes after 1P matches",
 "\t-p_p1zero \tStarts player 1 with 0 health",
 "\t-p_p2zero \tStarts player 2 with 0 health",
 "\t-p_thintext \tDisplays text at single pixel width",
@@ -175,6 +177,14 @@ JPBytes = lambda s: s.encode('shift_jis')
 HexString = lambda value, digits=8, space=False: "".join(["0123456789ABCDEF"[(value >> (i*4)) & 0xF] for i in range(0, digits)])[::-1]
 HexRead = lambda hexstring: sum(["0123456789ABCDEF".index(c) * (1<<(i*4)) for i,c in enumerate(hexstring.replace("0x", "").upper()[::-1]) if c in "01234567890ABCDEFG"])
 HexStringBytes = lambda hexstring: bytes([HexRead(text[i:i+2]) for text in [hexstring.replace("0x","").replace(" ", "")] for i in range(0, len(text), 2)]) if isinstance(hexstring, str) else hexstring
+
+# Returns true if hdi is updated version of VG2. (Lazy single byte comparison)
+def IsVG2Updated(hdibytes):
+	return len(hdibytes) >= 0x96BD40 and hdibytes[0x96BD32:0x96BD35] == "VG2".encode(ENCODING_EN) and hdibytes[0x96BD40] == 0
+
+def IsVG2Updated_Path(hdipath):
+	f = open(hdipath, 'rb'); data = bytearray(f.read()); f.close()
+	return IsVG2Updated(data);
 
 # Returns string with translated text using translate-shell cli
 def TranslateJP(jptext):
@@ -750,6 +760,8 @@ def GeoPatcher_TranslateLocalizerFile(localizer_filepath, outpath=""):
 	progress_step = 5
 	
 	dictionary_path = os.path.split(localizer_filepath)[0] + "/geodictionary.txt"
+	if not os.path.exists(dictionary_path):
+		dictionary_path = "geodictionary.txt"
 	translation_map = GeoPatcher_DictionaryFile(dictionary_path) # {original: translation}
 	translation_order = []
 	
@@ -957,6 +969,16 @@ def GeoPatcher_ApplyLocalizerFile(localizer_filepath, target_filepath=""):
 
 # ......................................................................
 
+# Returns lists of locations of byte instance
+def FindBytes(hdibytes, keybytes):
+	n = len(keybytes)
+	hits = []
+	for i in range(0, len(hdibytes)-n):
+		if hdibytes[i:i+n] == keybytes:
+			hits.append(i)
+	#print("Hits:", len(hits))
+	return hits
+
 # Write bytes to offset in byte array
 def GeoPatcher_PatchHDI(hdibytes, offset, codebytes):
 	n = len(codebytes)
@@ -972,50 +994,97 @@ def GeoPatcher_PatchVG2(hdipath):
 	data = bytearray(f.read())
 	f.close()
 	
+	# Function to update hdibytes with code
 	def GeoPatch(data, offsets, code):
 		for offset in offsets:
 			GeoPatcher_PatchHDI(data, offset, code)
 	
-	# Single Byte to Halfwidth
-	GeoPatch(
-		data,
-		[0x20EF38, 0x21B5F4, 0x236E6C],
-		#[0xb4,0x85,0x8b,0xf0,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90],  # Old. Uses pre-converted values
-		[0xb4,0x85,0x3c,0x60,0x72,0x02,0x04,0x01,0x04,0x1f,0x90,0x8b,0xf0], # Converts values on the fly
-	)
+	is_newvg2 = IsVG2Updated(data)
 	
-	# Single Byte increment
-	GeoPatch(
-		data,
-		[0x20EFDB, 0x21B697, 0x236F0F],
-		[0x83,0xC4,0x08,0x90], 
-	)
-	
-	# Halfwidth Char spacing, 5 bytes after above's noop
-	GeoPatch(
-		data,
-		[0x20EFE3, 0x21B69F, 0x236F17],
-		[0x01], 
-	)
-	
-	# Change newline from "n" 6E to "\n" 0A
-	GeoPatch(
-		data,
-		[0x20F015, 0x21B6D1, 0x236F49],
-		[0x80, 0x39, NEWLINE_CODE],
-	)
-	
-	# Change newline during winquote from "n" 6E to "\n" 0A
-	GeoPatch(
-		data,
-		[0x22CB40],
-		[0x00, NEWLINE_CODE, 0x00, NEWLINE_CODE],
-	)
-	
-	# Arcade Ending Patch
-	GeoPatch(data, [0x21B828], [0x29,0xff,0xb4,0x85,0x3c,0x60,0x72,0x02,0x04,0x01,0x04,0x1f,0x03,0xf8]) # Convert values on the fly
-	GeoPatch(data, [0x21B8CF], [0x90,0x83,0x06,0x3a,0xac,0x01]) # Byte inc + 8 px spacing
-	GeoPatch(data, [0x21B907], [0x26,0x80,0x38,0x0a]) # Newline from 6e to 0a
+	if IsVG2Updated(data):
+		print("> HDI is updated VG2 rom")
+		
+		# Single Byte to Halfwidth
+		GeoPatch(
+			data,
+			FindBytes(data, HexStringBytes("2A E4 8B F0 B1 08 D3 E6 8A 47 01 03 F0 56 2B C0")),
+			[0xb4,0x85,0x3c,0x60,0x72,0x02,0x04,0x01,0x04,0x1f,0x90,0x8b,0xf0], # Converts values on the fly
+		)
+		
+		# Single Byte increment
+		GeoPatch(
+			data,
+			[0x20EE7B, 0x21B627, 0x236EEF],
+			[0x83,0xC4,0x08,0x90],
+		)
+		
+		# Halfwidth Char spacing, 8 bytes after each of above's offsets
+		GeoPatch(
+			data,
+			[0x20EE7B+8, 0x21B627+8, 0x236EEF+8],
+			[0x01],
+		)
+		
+		# Change newline from "n" 6E to "\n" 0A
+		GeoPatch(
+			data,
+			FindBytes(data, HexStringBytes("80 39 6E 74 03 E9 05 FF")),
+			[0x80,0x39,NEWLINE_CODE,0x74,0x03,0xE9,0x05,0xFF]
+		)
+		
+		# Change newline during winquote from "n" 6E to "\n" 0A
+		GeoPatch(
+			data,
+			[0x22CAD0],
+			[0x00, NEWLINE_CODE, 0x00, NEWLINE_CODE],
+		)
+		
+		# Arcade Ending Patch
+		GeoPatch(data, [0x21B7B8], [0x29,0xff,0xb4,0x85,0x3c,0x60,0x72,0x02,0x04,0x01,0x04,0x1f,0x03,0xf8]) # Convert values on the fly
+		GeoPatch(data, [0x21B85F], [0x90,0x83,0x06,0x3a,0xac,0x01]) # Byte inc + 8 px spacing
+		GeoPatch(data, [0x21B897], [0x26,0x80,0x38,0x0a]) # Newline from 6e to 0a
+	else:
+		print("> Vanilla version of VG2")
+		
+		# Single Byte to Halfwidth
+		GeoPatch(
+			data,
+			[0x20EF38, 0x21B5F4, 0x236E6C],
+			[0xb4,0x85,0x3c,0x60,0x72,0x02,0x04,0x01,0x04,0x1f,0x90,0x8b,0xf0], # Converts values on the fly
+		)
+		
+		# Single Byte increment
+		GeoPatch(
+			data,
+			[0x20EFDB, 0x21B697, 0x236F0F],
+			[0x83,0xC4,0x08,0x90], 
+		)
+		
+		# Halfwidth Char spacing, 5 bytes after above's noop
+		GeoPatch(
+			data,
+			[0x20EFE3, 0x21B69F, 0x236F17],
+			[0x01], 
+		)
+		
+		# Change newline from "n" 6E to "\n" 0A
+		GeoPatch(
+			data,
+			[0x20F015, 0x21B6D1, 0x236F49],
+			[0x80, 0x39, NEWLINE_CODE],
+		)
+		
+		# Change newline during winquote from "n" 6E to "\n" 0A
+		GeoPatch(
+			data,
+			[0x22CB40],
+			[0x00, NEWLINE_CODE, 0x00, NEWLINE_CODE],
+		)
+		
+		# Arcade Ending Patch
+		GeoPatch(data, [0x21B828], [0x29,0xff,0xb4,0x85,0x3c,0x60,0x72,0x02,0x04,0x01,0x04,0x1f,0x03,0xf8]) # Convert values on the fly
+		GeoPatch(data, [0x21B8CF], [0x90,0x83,0x06,0x3a,0xac,0x01]) # Byte inc + 8 px spacing
+		GeoPatch(data, [0x21B907], [0x26,0x80,0x38,0x0a]) # Newline from 6e to 0a
 	
 	print("> Applying halfwidth patch to:", hdipath)
 	f = open(hdipath, 'wb')
@@ -1084,6 +1153,8 @@ def main():
 			pathlcl = ""
 			pathother = ""
 			
+			new_vg2_version = False;
+			
 			# Find paths in arguments
 			for v in argv[1:]:
 				vlower = v.lower()
@@ -1091,6 +1162,7 @@ def main():
 					pathlcl = v
 				elif vlower[-4:] == ".hdi":
 					pathhdi = v
+					new_vg2_version = IsVG2Updated_Path(pathhdi)
 				elif "-" not in v:
 					pathother = v
 			
@@ -1106,7 +1178,7 @@ def main():
 						pathlcl = pathhdi+".geolcl"
 					if pathlcl:
 						GeoPatcher_TranslateLocalizerFile(pathlcl, pathlcl)
-					# Write
+				# Write
 				elif v == "-w":
 					if not pathlcl and pathhdi:
 						pathlcl = pathhdi+".geolcl"
@@ -1127,29 +1199,29 @@ def main():
 				# Debugging patches
 				elif v == "-p_sfw":
 					f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
-					for offset in [0x0021E706]:
+					for offset in [0x21E706] if not new_vg2_version else [0x21E696]:
 						GeoPatcher_PatchHDI(data, offset, [0xEB]) # <- Change jnz (0x75XX) to jmp (0xEBXX)
 					f = open(pathhdi, 'wb'); f.write(data); f.close()
 					print("> Patch applied: Safe-For-Work Enabled")
 				elif v == "-p_nsfw":
 					f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
-					for offset in [0x0021E706]:
+					for offset in [0x21E706] if not new_vg2_version else [0x21E696]:
 						GeoPatcher_PatchHDI(data, offset, [0x75]) # <- Set to jnz (0x75XX)
 					f = open(pathhdi, 'wb'); f.write(data); f.close()
 					print("> Patch applied: NSFW Enabled")
 				elif v == "-p_p1zero":
 					f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
-					GeoPatcher_PatchHDI(data, 0x0020FE13, [0x00])
+					GeoPatcher_PatchHDI(data, 0x20FE13 if not new_vg2_version else 0x20FCB3, [0x00])
 					f = open(pathhdi, 'wb'); f.write(data); f.close()
 					print("> Patch applied: Player1 Zero Health")
 				elif v == "-p_p2zero":
 					f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
-					GeoPatcher_PatchHDI(data, 0x0020FE19, [0x01])
+					GeoPatcher_PatchHDI(data, 0x20FE19 if not new_vg2_version else 0x20FCB9, [0x01])
 					f = open(pathhdi, 'wb'); f.write(data); f.close()
 					print("> Patch applied: Player2 Zero Health")
 				elif v == "-p_thintext":
 					f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
-					for offset in [0x20EFAB, 0x21B667, 0x21B786, 0x236EDF]:
+					for offset in ([0x20EFAB, 0x21B667, 0x21B786, 0x236EDF] if not new_vg2_version else [0x20EE4B, 0x20EF6A, 0x21B716, 0x21B82C]):
 						GeoPatcher_PatchHDI(data, offset, [0xB1,0x03,0xD3,0xE0,0x50,0x90,0x90,0x90,0x90,0x90])
 					f = open(pathhdi, 'wb'); f.write(data); f.close()
 					print("> Patch applied: Thin Text")
