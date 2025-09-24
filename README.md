@@ -2,8 +2,8 @@
 GitHub: https://github.com/vGeoXIII/GeoPatcher  
 
 Project for streamlining the translation process of editing pc98 games.  
-Originally designed for editing "Variable Geo II: Bout of Cabalistic Goddess" by GIGA.
-Python script works on both the vanilla version of VG2 and the [Updated version found in the V.G. Perfect Collection](https://github.com/HarryJohnson69420VG/VariableGeo2.1).
+Originally designed for editing "Variable Geo II: Bout of Cabalistic Goddess" by GIGA.  
+Python script works on both the vanilla version of VG2 and the [Updated version found in the V.G. Perfect Collection](https://github.com/HarryJohnson69420VG/VariableGeo2.1).  
 
 A demo translation patch is provided as an ![xDelta file](https://github.com/vGeoXIII/GeoPatcher/releases/tag/Translation_Exports).  
 A SFW patch that disables humiliation scenes while keeping character intros is available as well: ![xDelta file](https://github.com/vGeoXIII/GeoPatcher/blob/main/VG2-SFW.xdelta).  
