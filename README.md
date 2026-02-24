@@ -52,6 +52,7 @@ Tool for extracting, editing, and patching text data in VGII. Run in shell/cli w
    -p_p1zero : Start player 1 with 0 health
    -p_p2zero : Start player 2 with 0 health
    -p_thintext : Displays text at single pixel width
+   -p_kotoe : Allows selecting Kotoe (Boss Character) in character select
 ```
 
 ## Resources + References
