@@ -55,6 +55,7 @@ HELP_STR = "\n".join([
 "\t-p_p1zero \tStarts player 1 with 0 health",
 "\t-p_p2zero \tStarts player 2 with 0 health",
 "\t-p_thintext \tDisplays text at single pixel width",
+"\t-p_kotoe \tAllow Kotoe to be selected in character select",
 "Multiple File Commands can be used in one call (Ex: $ python GeoPatcher.py game.hdi -r -t -w -p )",
 ])
 
@@ -1225,5 +1226,14 @@ def main():
 						GeoPatcher_PatchHDI(data, offset, [0xB1,0x03,0xD3,0xE0,0x50,0x90,0x90,0x90,0x90,0x90])
 					f = open(pathhdi, 'wb'); f.write(data); f.close()
 					print("> Patch applied: Thin Text")
+				elif v == "-p_kotoe":
+					f = open(pathhdi, 'rb'); data = bytearray(f.read()); f.close()
+					# Change 4th byte from 0xB (11) to 0xC (12) to extend char select upper bound
+					for offset in ([0x20F979] if not new_vg2_version else [0x20F819]):
+						GeoPatcher_PatchHDI(data, offset, [0x83,0x7E,0xD0,0x0C]) 	# Player 1
+					for offset in ([0x20F83F] if not new_vg2_version else [0x20F6DF]):
+						GeoPatcher_PatchHDI(data, offset, [0x83,0x7E,0xC6,0x0C]) 	# Player 2
+					f = open(pathhdi, 'wb'); f.write(data); f.close()
+					print("> Patch applied: Kotoe Select")
 main()
 
